@@ -33,7 +33,7 @@ curl -fsSL https://ollama.com/install.sh | sh
 
 ```bash
 ollama serve          # 启动 Ollama 服务（后台运行）
-ollama pull qwen3:32b # 拉取模型（约 20GB，需耐心等待）
+ollama pull qwen3.5:35b # 拉取模型（约 20GB，需耐心等待）
 ```
 
 > 如果显存/内存不够跑 32B，可以换小模型：
