@@ -8,15 +8,30 @@ from datetime import datetime
 import re
 import requests as http_requests
 from flask import Flask, jsonify, request, send_from_directory
+import anthropic
 
 # 屏蔽 werkzeug 每次请求的访问日志
 logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 app = Flask(__name__, static_folder="static")
 
-# ── Ollama 配置 ──────────────────────────────────────────────────
+# ── LLM 后端配置 ─────────────────────────────────────────────────
+# BACKEND = "api"    # 使用 Claude API（效果好，需设置 ANTHROPIC_API_KEY 环境变量）
+BACKEND = "ollama"   # 使用本地 Ollama（免费，效果取决于模型）
+
+# Ollama 配置
 OLLAMA_URL = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "qwen3.5:35b"  # 按实际 ollama 中的模型名修改
+
+# API 配置
+API_MODEL = "claude-opus-4-6"
+
+_api_client = None
+def get_api_client():
+    global _api_client
+    if _api_client is None:
+        _api_client = anthropic.Anthropic()
+    return _api_client
 
 # ── 常量 ────────────────────────────────────────────────────────
 ROLE_CONFIGS = {
@@ -250,18 +265,27 @@ def call_agent(player, task):
 
 【游戏规则与行为准则】
 {load_agent_context()}"""
-    resp = http_requests.post(OLLAMA_URL, json={
-        "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": task},
-        ],
-        "stream": False,
-    }, timeout=120)
-    text = resp.json()["message"]["content"].strip()
-    # 去掉 Qwen3 的 <think>...</think> 思考块
-    text = re.sub(r"<think>[\s\S]*?</think>", "", text).strip()
-    return text
+    if BACKEND == "api":
+        resp = get_api_client().messages.create(
+            model=API_MODEL,
+            max_tokens=256,
+            system=system,
+            messages=[{"role": "user", "content": task}],
+        )
+        return resp.content[0].text.strip()
+    else:
+        resp = http_requests.post(OLLAMA_URL, json={
+            "model": OLLAMA_MODEL,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": task},
+            ],
+            "stream": False,
+        }, timeout=120)
+        text = resp.json()["message"]["content"].strip()
+        # 去掉 Qwen3 的 <think>...</think> 思考块
+        text = re.sub(r"<think>[\s\S]*?</think>", "", text).strip()
+        return text
 
 # ── AI动作 ────────────────────────────────────────────────────────
 
