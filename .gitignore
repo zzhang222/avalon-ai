@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.DS_Store
+game_logs/
+game_state.json
+.claude/

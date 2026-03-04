@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>阿瓦隆</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0d0d1a; color: #d4c5a9; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; height: 100vh; display: flex; flex-direction: column; }
+
+/* ── Setup Screen ── */
+#setup { display: flex; align-items: center; justify-content: center; height: 100vh; }
+.setup-box { background: #1a1a2e; border: 1px solid #4a3f2f; border-radius: 12px; padding: 36px; width: 480px; }
+.setup-box h1 { text-align: center; font-size: 2rem; color: #c9a84c; margin-bottom: 8px; letter-spacing: 4px; }
+.setup-box p { text-align: center; color: #888; margin-bottom: 24px; font-size: 0.9rem; }
+.field { margin-bottom: 16px; }
+.field label { display: block; color: #a0896a; font-size: 0.85rem; margin-bottom: 6px; }
+.field input { width: 100%; background: #111125; border: 1px solid #3a3050; border-radius: 6px; padding: 8px 12px; color: #d4c5a9; font-size: 0.95rem; outline: none; }
+.field input:focus { border-color: #c9a84c; }
+#player-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.player-row { display: flex; gap: 8px; align-items: center; }
+.player-row input { flex: 1; background: #111125; border: 1px solid #3a3050; border-radius: 6px; padding: 7px 10px; color: #d4c5a9; font-size: 0.9rem; outline: none; }
+.player-row .you-badge { font-size: 0.75rem; color: #c9a84c; white-space: nowrap; }
+.btn { background: #4a3520; border: 1px solid #c9a84c; color: #c9a84c; padding: 10px 28px; border-radius: 6px; cursor: pointer; font-size: 1rem; transition: background 0.2s; }
+.btn:hover { background: #6a4f30; }
+.btn-sm { padding: 5px 14px; font-size: 0.85rem; }
+.btn-danger { border-color: #c44; color: #c44; }
+.btn-danger:hover { background: #3a1111; }
+#setup-err { color: #c44; font-size: 0.85rem; margin-top: 8px; min-height: 20px; }
+
+/* ── Game Screen ── */
+#game { display: none; flex-direction: column; height: 100vh; }
+
+/* Header */
+#header { background: #111125; border-bottom: 1px solid #2a2040; padding: 10px 20px; display: flex; align-items: center; gap: 20px; flex-shrink: 0; }
+#header h2 { color: #c9a84c; font-size: 1.1rem; letter-spacing: 2px; min-width: 80px; }
+#missions { display: flex; gap: 8px; align-items: center; }
+.mission-dot { width: 32px; height: 32px; border-radius: 50%; border: 2px solid #444; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #888; cursor: default; }
+.mission-dot.current { border-color: #c9a84c; color: #c9a84c; }
+.mission-dot.good { background: #1a4a1a; border-color: #4a9a4a; color: #6fcf6f; }
+.mission-dot.evil { background: #4a1a1a; border-color: #9a4a4a; color: #cf6f6f; }
+#score { margin-left: auto; font-size: 0.9rem; color: #a0896a; }
+
+/* Main area */
+#main { display: flex; flex: 1; overflow: hidden; }
+
+/* Left: Players */
+#players-panel { width: 180px; background: #111125; border-right: 1px solid #2a2040; padding: 12px; overflow-y: auto; flex-shrink: 0; }
+#players-panel h3 { color: #a0896a; font-size: 0.8rem; letter-spacing: 1px; margin-bottom: 10px; text-transform: uppercase; }
+.player-card { background: #1a1a2e; border: 1px solid #2a2040; border-radius: 6px; padding: 8px 10px; margin-bottom: 6px; font-size: 0.85rem; }
+.player-card.leader { border-color: #c9a84c; }
+.player-card.in-team { border-color: #4a7a4a; }
+.player-card .pname { color: #d4c5a9; font-weight: bold; }
+.player-card .ptag { font-size: 0.7rem; color: #888; margin-top: 2px; }
+.player-card.is-user .pname { color: #c9a84c; }
+
+/* Center: Log */
+#log-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.log-entry { display: flex; gap: 8px; align-items: flex-start; }
+.log-entry .who { font-size: 0.8rem; color: #8a7a5a; min-width: 60px; flex-shrink: 0; text-align: right; padding-top: 2px; }
+.log-entry .msg { background: #1a1a2e; border-radius: 6px; padding: 6px 10px; font-size: 0.88rem; line-height: 1.5; flex: 1; }
+.log-entry.system .msg { background: transparent; color: #6a6a8a; font-size: 0.82rem; border-left: 2px solid #3a3060; padding-left: 8px; }
+.log-entry.result .msg { background: #1a2a1a; color: #8fcf8f; border-left: 2px solid #4a8a4a; }
+.log-entry.result.evil .msg { background: #2a1a1a; color: #cf8f8f; border-left: 2px solid #8a4a4a; }
+.log-entry.vote .msg { background: #1a1a3a; color: #8a8acf; font-size: 0.82rem; }
+.log-entry.is-user .msg { background: #1f1a0a; border-left: 2px solid #c9a84c; }
+
+/* Right: My Info */
+#info-panel { width: 220px; background: #111125; border-left: 1px solid #2a2040; padding: 14px; overflow-y: auto; flex-shrink: 0; }
+#info-panel h3 { color: #a0896a; font-size: 0.8rem; letter-spacing: 1px; margin-bottom: 10px; text-transform: uppercase; }
+.info-box { background: #1a1a2e; border: 1px solid #2a2040; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.info-box .role-name { font-size: 1.1rem; color: #c9a84c; font-weight: bold; margin-bottom: 4px; }
+.info-box .role-side { font-size: 0.8rem; }
+.info-box .role-side.good { color: #6fcf6f; }
+.info-box .role-side.evil { color: #cf6f6f; }
+.info-box .sees { margin-top: 8px; font-size: 0.82rem; color: #a0896a; border-top: 1px solid #2a2040; padding-top: 8px; }
+.sees-item { display: inline-block; background: #2a2040; border-radius: 4px; padding: 2px 8px; margin: 2px; font-size: 0.78rem; color: #c9a84c; }
+#phase-info { background: #1a1a2e; border: 1px solid #2a2040; border-radius: 8px; padding: 12px; }
+#phase-info .phase-label { font-size: 0.75rem; color: #888; margin-bottom: 4px; }
+#phase-info .phase-val { font-size: 0.9rem; color: #d4c5a9; }
+
+/* Bottom: Input */
+#input-area { border-top: 1px solid #2a2040; padding: 12px 16px; background: #0d0d1a; flex-shrink: 0; min-height: 80px; max-height: 220px; overflow-y: auto; }
+#input-area .hint { font-size: 0.82rem; color: #888; margin-bottom: 8px; }
+
+/* Input components */
+.input-row { display: flex; gap: 8px; }
+#text-input { flex: 1; background: #1a1a2e; border: 1px solid #3a3050; border-radius: 6px; padding: 8px 12px; color: #d4c5a9; font-size: 0.9rem; outline: none; resize: none; font-family: inherit; }
+#text-input:focus { border-color: #c9a84c; }
+
+.vote-btns { display: flex; gap: 10px; }
+.vote-btn { padding: 8px 24px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.95rem; font-weight: bold; }
+.vote-btn.yes { background: #1a4a1a; border: 1px solid #4a9a4a; color: #6fcf6f; }
+.vote-btn.yes:hover { background: #2a6a2a; }
+.vote-btn.no { background: #4a1a1a; border: 1px solid #9a4a4a; color: #cf6f6f; }
+.vote-btn.no:hover { background: #6a2a2a; }
+
+.card-btns { display: flex; gap: 10px; }
+.card-btn { padding: 8px 24px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.95rem; font-weight: bold; }
+.card-btn.success { background: #1a4a1a; border: 1px solid #4a9a4a; color: #6fcf6f; }
+.card-btn.success:hover { background: #2a6a2a; }
+.card-btn.fail { background: #4a1a1a; border: 1px solid #9a4a4a; color: #cf6f6f; }
+.card-btn.fail:hover { background: #6a2a2a; }
+
+#propose-area { display: flex; flex-direction: column; gap: 8px; }
+#propose-checkboxes { display: flex; flex-wrap: wrap; gap: 6px; }
+.propose-check { display: flex; align-items: center; gap: 4px; background: #1a1a2e; border: 1px solid #3a3050; border-radius: 5px; padding: 4px 10px; cursor: pointer; font-size: 0.85rem; }
+.propose-check input { accent-color: #c9a84c; }
+.propose-check.selected { border-color: #c9a84c; color: #c9a84c; }
+
+#assassin-area { display: flex; flex-direction: column; gap: 8px; }
+#assassin-area select { background: #1a1a2e; border: 1px solid #3a3050; border-radius: 6px; padding: 7px 10px; color: #d4c5a9; font-size: 0.9rem; outline: none; }
+
+.thinking { color: #888; font-size: 0.85rem; font-style: italic; animation: pulse 1.2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+#winner-banner { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 100; align-items: center; justify-content: center; flex-direction: column; gap: 20px; }
+#winner-banner h1 { font-size: 3rem; }
+#winner-banner.good h1 { color: #6fcf6f; }
+#winner-banner.evil h1 { color: #cf6f6f; }
+#winner-banner p { color: #d4c5a9; font-size: 1rem; }
+#winner-banner .roles-reveal { background: #1a1a2e; border: 1px solid #2a2040; border-radius: 8px; padding: 16px 24px; }
+</style>
+</head>
+<body>
+
+<!-- ── Setup ── -->
+<div id="setup">
+  <div class="setup-box">
+    <h1>阿 瓦 隆</h1>
+    <p>Avalon: The Resistance</p>
+    <div class="field">
+      <label>你的名字</label>
+      <input id="my-name" value="玩家" maxlength="10">
+    </div>
+    <div class="field">
+      <label>我的角色偏好（可选）</label>
+      <select id="force-role" style="width:100%;background:#111125;border:1px solid #3a3050;border-radius:6px;padding:8px 12px;color:#d4c5a9;font-size:0.95rem;outline:none">
+        <option value="">随机分配</option>
+        <option value="莫德雷德">莫德雷德（坏人，梅林看不见）</option>
+        <option value="莫甘娜">莫甘娜（坏人，伪装成梅林）</option>
+        <option value="爪牙">爪牙（坏人）</option>
+        <option value="梅林">梅林（好人，知道坏人）</option>
+        <option value="派西维尔">派西维尔（好人，识别梅林）</option>
+        <option value="忠臣">忠臣（好人）</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>AI玩家名字（每行一个，5~10人局）</label>
+      <div id="player-list"></div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="btn btn-sm" onclick="addAI()">+ 添加AI</button>
+        <button class="btn btn-sm btn-danger" onclick="removeAI()">− 移除</button>
+      </div>
+    </div>
+    <button class="btn" style="width:100%;margin-top:8px" onclick="startGame()">开始游戏</button>
+    <div id="setup-err"></div>
+  </div>
+</div>
+
+<!-- ── Game ── -->
+<div id="game">
+  <div id="header">
+    <h2>⚔ 阿瓦隆</h2>
+    <div id="missions"></div>
+    <div id="score">好人 0 / 坏人 0</div>
+  </div>
+  <div id="main">
+    <div id="players-panel">
+      <h3>玩家</h3>
+      <div id="player-cards"></div>
+    </div>
+    <div id="log-panel">
+      <div id="log"></div>
+    </div>
+    <div id="info-panel">
+      <h3>我的信息</h3>
+      <div class="info-box" id="my-role-box">
+        <div class="role-name" id="my-role">—</div>
+        <div class="role-side" id="my-side">—</div>
+        <div class="sees" id="my-sees" style="display:none"></div>
+      </div>
+      <div id="phase-info">
+        <div class="phase-label">当前阶段</div>
+        <div class="phase-val" id="phase-val">—</div>
+        <div class="phase-label" style="margin-top:8px">队长</div>
+        <div class="phase-val" id="leader-val">—</div>
+        <div class="phase-label" style="margin-top:8px">本轮队伍</div>
+        <div class="phase-val" id="team-val">—</div>
+      </div>
+    </div>
+  </div>
+  <div id="input-area">
+    <div class="hint" id="input-hint">等待中…</div>
+    <div id="input-content"></div>
+  </div>
+</div>
+
+<!-- ── Winner Banner ── -->
+<div id="winner-banner">
+  <h1 id="winner-title"></h1>
+  <div class="roles-reveal" id="roles-reveal"></div>
+  <button class="btn" onclick="location.reload()">再来一局</button>
+</div>
+
+<script>
+const aiNames = ["艾丽斯","鲍勃","查理","戴安娜","伊芙"];
+let aiInputs = [...aiNames];
+let lastLogLen = 0;
+let pollTimer = null;
+let state = null;
+let lastUserAction = null;  // 避免重复重绘输入区
+
+// ── Setup ──────────────────────────────────────────────────────
+function renderSetup() {
+  const list = document.getElementById("player-list");
+  list.innerHTML = "";
+  aiInputs.forEach((name, i) => {
+    const row = document.createElement("div");
+    row.className = "player-row";
+    row.innerHTML = `<input value="${name}" oninput="aiInputs[${i}]=this.value" placeholder="AI玩家名">`;
+    list.appendChild(row);
+  });
+}
+function addAI() {
+  if (aiInputs.length >= 9) return;
+  aiInputs.push("AI" + (aiInputs.length + 1));
+  renderSetup();
+}
+function removeAI() {
+  if (aiInputs.length <= 4) return;
+  aiInputs.pop();
+  renderSetup();
+}
+renderSetup();
+
+async function startGame() {
+  const myName = document.getElementById("my-name").value.trim() || "玩家";
+  const ai = aiInputs.map(n => n.trim()).filter(Boolean);
+  const players = [myName, ...ai];
+  const err = document.getElementById("setup-err");
+  if (players.length < 5 || players.length > 10) {
+    err.textContent = "总人数需在5~10之间（包含你自己）"; return;
+  }
+  const resp = await fetch("/api/start", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({players, user: myName, force_role: document.getElementById("force-role").value})
+  });
+  const data = await resp.json();
+  if (data.error) { err.textContent = data.error; return; }
+  document.getElementById("setup").style.display = "none";
+  document.getElementById("game").style.display = "flex";
+  startPolling();
+}
+
+// ── Polling ───────────────────────────────────────────────────
+function startPolling() {
+  pollTimer = setInterval(poll, 600);
+  poll();
+}
+async function poll() {
+  try {
+    const resp = await fetch("/api/state");
+    state = await resp.json();
+    if (state.phase !== "setup") render(state);
+  } catch(e) {}
+}
+
+// ── Render ────────────────────────────────────────────────────
+const PHASE_NAMES = {
+  propose:"提名队伍", speaking:"发言阶段", voting:"投票阶段",
+  mission:"执行任务", discussion:"任务讨论", assassination:"刺杀阶段", game_over:"游戏结束"
+};
+
+function render(s) {
+  renderMissions(s);
+  renderPlayers(s);
+  renderLog(s);
+  renderInfo(s);
+  renderInput(s);
+  if (s.phase === "game_over") showWinner(s);
+}
+
+function renderMissions(s) {
+  const el = document.getElementById("missions");
+  el.innerHTML = "";
+  s.mission_sizes.forEach((size, i) => {
+    const dot = document.createElement("div");
+    dot.className = "mission-dot";
+    const res = s.mission_results.find(r => r.mission === i+1);
+    if (res) dot.className += res.success ? " good" : " evil";
+    else if (s.mission_idx === i && s.phase !== "game_over") dot.className += " current";
+    dot.textContent = size;
+    dot.title = `第${i+1}轮 (${size}人)`;
+    el.appendChild(dot);
+  });
+  document.getElementById("score").textContent = `好人 ${s.good_wins} / 坏人 ${s.evil_wins}`;
+}
+
+function renderPlayers(s) {
+  const el = document.getElementById("player-cards");
+  el.innerHTML = "";
+  s.players.forEach(p => {
+    const div = document.createElement("div");
+    let cls = "player-card";
+    if (p === s.leader) cls += " leader";
+    if (s.proposed_team && s.proposed_team.includes(p)) cls += " in-team";
+    if (p === s.user) cls += " is-user";
+    const tags = [];
+    if (p === s.leader) tags.push("👑队长");
+    if (s.proposed_team && s.proposed_team.includes(p)) tags.push("🗡队伍");
+    if (p === s.user) tags.push("（你）");
+    div.className = cls;
+    div.innerHTML = `<div class="pname">${p}</div><div class="ptag">${tags.join(" ")}</div>`;
+    el.appendChild(div);
+  });
+}
+
+function renderLog(s) {
+  const el = document.getElementById("log");
+  const entries = s.log || [];
+  if (entries.length === lastLogLen) return;
+  lastLogLen = entries.length;
+  el.innerHTML = "";
+  entries.forEach(e => {
+    const row = document.createElement("div");
+    let cls = "log-entry";
+    if (e.type === "system") cls += " system";
+    else if (e.type === "result") {
+      cls += " result";
+      if (e.text.includes("坏人获胜") || e.text.includes("任务失败") || e.text.includes("被刺")) cls += " evil";
+    }
+    else if (e.type === "vote") cls += " vote";
+    if (e.player === s.user) cls += " is-user";
+    row.className = cls;
+    row.innerHTML = `<div class="who">${e.player}</div><div class="msg">${escHtml(e.text)}</div>`;
+    el.appendChild(row);
+  });
+  el.scrollTop = el.scrollHeight;
+}
+
+function renderInfo(s) {
+  document.getElementById("my-role").textContent = s.user_role || "—";
+  const sideEl = document.getElementById("my-side");
+  sideEl.textContent = s.user_side || "—";
+  sideEl.className = "role-side " + (s.user_side === "好人" ? "good" : "evil");
+
+  const seesEl = document.getElementById("my-sees");
+  const sees = s.user_sees || {};
+  let seesHtml = "";
+  if (sees.sees_evil && sees.sees_evil.length > 0) {
+    seesHtml += `<div style="margin-bottom:4px;color:#cf6f6f">👁 你看到的坏人：</div>`;
+    sees.sees_evil.forEach(p => seesHtml += `<span class="sees-item" style="color:#cf6f6f">${p}</span>`);
+  }
+  if (sees.sees_merlin_morgana && sees.sees_merlin_morgana.length > 0) {
+    seesHtml += `<div style="margin-bottom:4px;color:#c9a84c">🔮 梅林候选（梅林或莫甘娜）：</div>`;
+    sees.sees_merlin_morgana.forEach(p => seesHtml += `<span class="sees-item">${p}</span>`);
+  }
+  if (sees.evil_teammates && sees.evil_teammates.length > 0) {
+    seesHtml += `<div style="margin-bottom:4px;color:#cf6f6f">🤝 坏人队友：</div>`;
+    sees.evil_teammates.forEach(p => seesHtml += `<span class="sees-item" style="color:#cf6f6f">${p}</span>`);
+  }
+  if (seesHtml) { seesEl.innerHTML = seesHtml; seesEl.style.display = "block"; }
+  else seesEl.style.display = "none";
+
+  document.getElementById("phase-val").textContent = PHASE_NAMES[s.phase] || s.phase;
+  document.getElementById("leader-val").textContent = s.leader || "—";
+  document.getElementById("team-val").textContent = (s.proposed_team && s.proposed_team.length > 0)
+    ? s.proposed_team.join("、") : "—";
+}
+
+function renderInput(s) {
+  const hint = document.getElementById("input-hint");
+  const content = document.getElementById("input-content");
+
+  if (s.phase === "game_over") {
+    hint.textContent = "游戏已结束"; content.innerHTML = ""; return;
+  }
+
+  // 如果 action 没变，不重绘（避免勾选框被重置）
+  if (s.user_action && s.user_action === lastUserAction) return;
+  lastUserAction = s.user_action || null;
+
+  if (!s.waiting_user || !s.user_action) {
+    // AI thinking
+    let thinkMsg = "AI玩家思考中…";
+    if (s.phase === "voting" && s.ai_votes_count !== undefined) {
+      thinkMsg = `收集AI投票中… (${s.ai_votes_count}/${s.total_ai})`;
+    }
+    hint.textContent = thinkMsg;
+    content.innerHTML = `<div class="thinking">${thinkMsg}</div>`;
+    return;
+  }
+
+  const act = s.user_action;
+
+  if (act === "propose") {
+    const nNeed = s.mission_sizes[s.mission_idx];  // 修复：mission_idx 已是0-indexed
+    hint.textContent = `📋 你是队长，请提名 ${nNeed} 人执行任务（已选：0/${nNeed}）`;
+    content.innerHTML = `
+      <div id="propose-area">
+        <div id="propose-checkboxes"></div>
+        <div class="input-row" style="margin-top:8px">
+          <textarea id="text-input" rows="1" placeholder="提名理由（可选）" style="max-height:50px"></textarea>
+          <button class="btn" id="propose-btn" onclick="submitPropose()" disabled style="opacity:0.5">提交提名（0/${nNeed}）</button>
+        </div>
+      </div>`;
+    const cbContainer = document.getElementById("propose-checkboxes");
+    s.players.forEach(p => {
+      const label = document.createElement("label");
+      label.className = "propose-check";
+      label.innerHTML = `<input type="checkbox" value="${p}" onchange="onProposeChange(${nNeed})"> ${p}`;
+      cbContainer.appendChild(label);
+    });
+
+  } else if (act === "speak") {
+    const order = s.speak_order || [];
+    const idx = s.speak_idx;
+    const speaker = order[idx];
+    hint.textContent = `💬 轮到你发言 [${idx+1}/${order.length}]`;
+    content.innerHTML = `<div class="input-row">
+      <textarea id="text-input" rows="2" placeholder="发表你的看法…"></textarea>
+      <button class="btn" onclick="submitSpeak('speak')">发言</button>
+    </div>`;
+
+  } else if (act === "speak_summary") {
+    const nNeed = s.mission_sizes[s.mission_idx];
+    const currentTeam = s.proposed_team || [];
+    hint.textContent = `💬 轮到你做总结发言（队长）——可维持或更换队伍（需${nNeed}人）`;
+    content.innerHTML = `
+      <div style="margin-bottom:6px">
+        <div style="font-size:0.8rem;color:#a0896a;margin-bottom:4px">队伍（需${nNeed}人，可更换）：</div>
+        <div id="summary-checkboxes" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+      </div>
+      <div class="input-row" style="margin-top:6px">
+        <textarea id="text-input" rows="2" placeholder="总结发言…"></textarea>
+        <button class="btn" id="summary-btn" onclick="submitSummary(${nNeed})" disabled style="opacity:0.5">总结（0/${nNeed}）</button>
+      </div>`;
+    const cbContainer = document.getElementById("summary-checkboxes");
+    s.players.forEach(p => {
+      const label = document.createElement("label");
+      label.className = "propose-check" + (currentTeam.includes(p) ? " selected" : "");
+      label.innerHTML = `<input type="checkbox" value="${p}" ${currentTeam.includes(p) ? "checked" : ""} onchange="onSummaryChange(${nNeed})"> ${p}`;
+      cbContainer.appendChild(label);
+    });
+    onSummaryChange(nNeed);
+
+  } else if (act === "vote") {
+    hint.textContent = `🗳 请投票：是否同意这支队伍？`;
+    content.innerHTML = `<div class="vote-btns">
+      <button class="vote-btn yes" onclick="submitVote(true)">✅ 同意</button>
+      <button class="vote-btn no" onclick="submitVote(false)">❌ 反对</button>
+    </div>`;
+
+  } else if (act === "card") {
+    const isEvil = s.user_side === "坏人";
+    hint.textContent = `🃏 请打出任务牌（秘密）`;
+    if (isEvil) {
+      content.innerHTML = `<div class="card-btns">
+        <button class="card-btn success" onclick="submitCard(true)">🟢 成功</button>
+        <button class="card-btn fail" onclick="submitCard(false)">🔴 失败</button>
+      </div>`;
+    } else {
+      content.innerHTML = `<div class="card-btns">
+        <button class="card-btn success" onclick="submitCard(true)">🟢 成功（好人只能出成功）</button>
+      </div>`;
+    }
+
+  } else if (act === "discuss") {
+    hint.textContent = `💬 任务结束，轮到你发言讨论`;
+    content.innerHTML = `<div class="input-row">
+      <textarea id="text-input" rows="2" placeholder="你的看法…"></textarea>
+      <button class="btn" onclick="submitSpeak('discuss')">发言</button>
+    </div>`;
+
+  } else if (act === "assassin_discuss") {
+    hint.textContent = `🗡 刺杀讨论：分析谁最可能是梅林`;
+    content.innerHTML = `<div class="input-row">
+      <textarea id="text-input" rows="2" placeholder="你认为谁是梅林？分析理由…"></textarea>
+      <button class="btn" onclick="submitSpeak('assassin_discuss')">发言</button>
+    </div>`;
+
+  } else if (act === "assassinate") {
+    hint.textContent = `🗡 你是刺客，讨论结束，请选择最终刺杀目标`;
+    content.innerHTML = `<div id="assassin-area">
+      <select id="assassin-target">
+        <option value="">-- 选择目标 --</option>
+        ${s.players.filter(p => p !== s.user).map(p => `<option value="${p}">${p}</option>`).join("")}
+      </select>
+      <button class="btn" onclick="submitAssassinate()">🗡 刺杀</button>
+    </div>`;
+  }
+}
+
+function onSummaryChange(nNeed) {
+  const checked = document.querySelectorAll("#summary-checkboxes input:checked");
+  const n = checked.length;
+  document.querySelectorAll("#summary-checkboxes .propose-check").forEach(label => {
+    label.classList.toggle("selected", label.querySelector("input").checked);
+  });
+  const btn = document.getElementById("summary-btn");
+  if (btn) {
+    const ok = n === nNeed;
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? "1" : "0.5";
+    btn.textContent = `总结（${n}/${nNeed}）`;
+  }
+}
+async function submitSummary(nNeed) {
+  const text = document.getElementById("text-input")?.value.trim();
+  if (!text) return;
+  const team = [...document.querySelectorAll("#summary-checkboxes input:checked")].map(cb => cb.value);
+  if (team.length !== nNeed) return;
+  await sendAction({action: "speak_summary", text, team});
+}
+
+function onProposeChange(nNeed) {
+  const checked = document.querySelectorAll("#propose-checkboxes input:checked");
+  const n = checked.length;
+  // 更新样式
+  document.querySelectorAll(".propose-check").forEach(label => {
+    label.classList.toggle("selected", label.querySelector("input").checked);
+  });
+  // 更新按钮状态
+  const btn = document.getElementById("propose-btn");
+  if (btn) {
+    const ok = n === nNeed;
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? "1" : "0.5";
+    btn.textContent = `提交提名（${n}/${nNeed}）`;
+  }
+  // 更新 hint
+  document.getElementById("input-hint").textContent =
+    `📋 你是队长，请提名 ${nNeed} 人执行任务（已选：${n}/${nNeed}）`;
+}
+
+// ── Actions ───────────────────────────────────────────────────
+async function submitPropose() {
+  const checked = [...document.querySelectorAll("#propose-checkboxes input:checked")].map(cb => cb.value);
+  const reason = document.getElementById("text-input")?.value.trim() || "";
+  await sendAction({action:"propose", team:checked, reason});
+}
+async function submitSpeak(actType) {
+  const text = document.getElementById("text-input")?.value.trim();
+  if (!text) return;
+  await sendAction({action: actType, text});
+}
+async function submitVote(v) {
+  await sendAction({action:"vote", vote:v});
+}
+async function submitCard(c) {
+  await sendAction({action:"card", card:c});
+}
+async function submitAssassinate() {
+  const target = document.getElementById("assassin-target").value;
+  if (!target) return;
+  await sendAction({action:"assassinate", target});
+}
+
+async function sendAction(data) {
+  try {
+    const resp = await fetch("/api/action", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(data)
+    });
+    const result = await resp.json();
+    if (result.error) { alert(result.error); return; }
+    lastUserAction = null;  // 允许下一个阶段重绘
+    poll();
+  } catch(e) { console.error(e); }
+}
+
+// ── Winner ────────────────────────────────────────────────────
+let winnerShown = false;
+function showWinner(s) {
+  if (winnerShown) return;
+  winnerShown = true;
+  clearInterval(pollTimer);
+  const banner = document.getElementById("winner-banner");
+  const title = document.getElementById("winner-title");
+  const rolesEl = document.getElementById("roles-reveal");
+  banner.className = s.winner === "good" ? "good" : "evil";
+  title.textContent = s.winner === "good" ? "✨ 好人获胜！" : "💀 坏人获胜！";
+  if (s.roles) {
+    rolesEl.innerHTML = "<b>角色揭晓：</b><br>" +
+      Object.entries(s.roles).map(([p,r]) => `${p} → ${r}`).join("　");
+  }
+  banner.style.display = "flex";
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+</script>
+</body>
+</html>
