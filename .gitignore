@@ -4,3 +4,5 @@ __pycache__/
 game_logs/
 game_state.json
 .claude/
+.venv/
+.pytest_cache/
