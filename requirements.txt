@@ -1,3 +1,4 @@
 flask
 requests
-anthropic
+anthropic>=2.14
+pytest

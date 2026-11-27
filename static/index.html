@@ -143,6 +143,7 @@ body { background: #0d0d1a; color: #d4c5a9; font-family: "PingFang SC", "Microso
         <option value="梅林">梅林（好人，知道坏人）</option>
         <option value="派西维尔">派西维尔（好人，识别梅林）</option>
         <option value="忠臣">忠臣（好人）</option>
+        <option value="奥伯龙">奥伯龙（坏人，仅10人局）</option>
       </select>
     </div>
     <div class="field">
@@ -164,6 +165,7 @@ body { background: #0d0d1a; color: #d4c5a9; font-family: "PingFang SC", "Microso
     <h2>⚔ 阿瓦隆</h2>
     <div id="missions"></div>
     <div id="score">好人 0 / 坏人 0</div>
+    <div id="backend" style="font-size:0.75rem;color:#6a6a8a"></div>
   </div>
   <div id="main">
     <div id="players-panel">
@@ -191,6 +193,7 @@ body { background: #0d0d1a; color: #d4c5a9; font-family: "PingFang SC", "Microso
     </div>
   </div>
   <div id="input-area">
+    <div id="error-bar" style="display:none;color:#cf6f6f;font-size:0.8rem;margin-bottom:6px"></div>
     <div class="hint" id="input-hint">等待中…</div>
     <div id="input-content"></div>
   </div>
@@ -218,7 +221,7 @@ function renderSetup() {
   aiInputs.forEach((name, i) => {
     const row = document.createElement("div");
     row.className = "player-row";
-    row.innerHTML = `<input value="${name}" oninput="aiInputs[${i}]=this.value" placeholder="AI玩家名">`;
+    row.innerHTML = `<input value="${escHtml(name)}" oninput="aiInputs[${i}]=this.value" placeholder="AI玩家名">`;
     list.appendChild(row);
   });
 }
@@ -242,6 +245,9 @@ async function startGame() {
   if (players.length < 5 || players.length > 10) {
     err.textContent = "总人数需在5~10之间（包含你自己）"; return;
   }
+  if (new Set(players).size !== players.length) {
+    err.textContent = "玩家名字不能重复"; return;
+  }
   const resp = await fetch("/api/start", {
     method: "POST",
     headers: {"Content-Type":"application/json"},
@@ -249,10 +255,17 @@ async function startGame() {
   });
   const data = await resp.json();
   if (data.error) { err.textContent = data.error; return; }
+  showGame();
+}
+function showGame() {
   document.getElementById("setup").style.display = "none";
   document.getElementById("game").style.display = "flex";
   startPolling();
 }
+// 刷新页面时，若已有进行中的对局则直接回到游戏
+fetch("/api/state").then(r => r.json()).then(s => {
+  if (s.phase && s.phase !== "setup" && s.phase !== "game_over") showGame();
+}).catch(() => {});
 
 // ── Polling ───────────────────────────────────────────────────
 function startPolling() {
@@ -291,11 +304,16 @@ function renderMissions(s) {
     const res = s.mission_results.find(r => r.mission === i+1);
     if (res) dot.className += res.success ? " good" : " evil";
     else if (s.mission_idx === i && s.phase !== "game_over") dot.className += " current";
-    dot.textContent = size;
-    dot.title = `第${i+1}轮 (${size}人)`;
+    const dbl = s.double_fail_idx === i;
+    dot.textContent = size + (dbl ? "★" : "");
+    dot.title = `第${i+1}轮 (${size}人)` + (dbl ? "，需2张失败牌" : "");
     el.appendChild(dot);
   });
   document.getElementById("score").textContent = `好人 ${s.good_wins} / 坏人 ${s.evil_wins}`;
+  document.getElementById("backend").textContent = s.backend || "";
+  const eb = document.getElementById("error-bar");
+  eb.textContent = s.error ? `⚠️ 模型调用出错：${s.error}` : "";
+  eb.style.display = s.error ? "block" : "none";
 }
 
 function renderPlayers(s) {
@@ -312,7 +330,7 @@ function renderPlayers(s) {
     if (s.proposed_team && s.proposed_team.includes(p)) tags.push("🗡队伍");
     if (p === s.user) tags.push("（你）");
     div.className = cls;
-    div.innerHTML = `<div class="pname">${p}</div><div class="ptag">${tags.join(" ")}</div>`;
+    div.innerHTML = `<div class="pname">${escHtml(p)}</div><div class="ptag">${tags.join(" ")}</div>`;
     el.appendChild(div);
   });
 }
@@ -329,12 +347,12 @@ function renderLog(s) {
     if (e.type === "system") cls += " system";
     else if (e.type === "result") {
       cls += " result";
-      if (e.text.includes("坏人获胜") || e.text.includes("任务失败") || e.text.includes("被刺")) cls += " evil";
+      if (e.text.includes("坏人获胜") || e.text.includes("❌")) cls += " evil";
     }
     else if (e.type === "vote") cls += " vote";
     if (e.player === s.user) cls += " is-user";
     row.className = cls;
-    row.innerHTML = `<div class="who">${e.player}</div><div class="msg">${escHtml(e.text)}</div>`;
+    row.innerHTML = `<div class="who">${escHtml(e.player)}</div><div class="msg">${escHtml(e.text)}</div>`;
     el.appendChild(row);
   });
   el.scrollTop = el.scrollHeight;
@@ -351,15 +369,15 @@ function renderInfo(s) {
   let seesHtml = "";
   if (sees.sees_evil && sees.sees_evil.length > 0) {
     seesHtml += `<div style="margin-bottom:4px;color:#cf6f6f">👁 你看到的坏人：</div>`;
-    sees.sees_evil.forEach(p => seesHtml += `<span class="sees-item" style="color:#cf6f6f">${p}</span>`);
+    sees.sees_evil.forEach(p => seesHtml += `<span class="sees-item" style="color:#cf6f6f">${escHtml(p)}</span>`);
   }
   if (sees.sees_merlin_morgana && sees.sees_merlin_morgana.length > 0) {
     seesHtml += `<div style="margin-bottom:4px;color:#c9a84c">🔮 梅林候选（梅林或莫甘娜）：</div>`;
-    sees.sees_merlin_morgana.forEach(p => seesHtml += `<span class="sees-item">${p}</span>`);
+    sees.sees_merlin_morgana.forEach(p => seesHtml += `<span class="sees-item">${escHtml(p)}</span>`);
   }
   if (sees.evil_teammates && sees.evil_teammates.length > 0) {
     seesHtml += `<div style="margin-bottom:4px;color:#cf6f6f">🤝 坏人队友：</div>`;
-    sees.evil_teammates.forEach(p => seesHtml += `<span class="sees-item" style="color:#cf6f6f">${p}</span>`);
+    sees.evil_teammates.forEach(p => seesHtml += `<span class="sees-item" style="color:#cf6f6f">${escHtml(p)}</span>`);
   }
   if (seesHtml) { seesEl.innerHTML = seesHtml; seesEl.style.display = "block"; }
   else seesEl.style.display = "none";
@@ -384,19 +402,19 @@ function renderInput(s) {
 
   if (!s.waiting_user || !s.user_action) {
     // AI thinking
-    let thinkMsg = "AI玩家思考中…";
+    let thinkMsg = s.current_actor ? `${s.current_actor} 思考中…` : "AI玩家思考中…";
     if (s.phase === "voting" && s.ai_votes_count !== undefined) {
       thinkMsg = `收集AI投票中… (${s.ai_votes_count}/${s.total_ai})`;
     }
     hint.textContent = thinkMsg;
-    content.innerHTML = `<div class="thinking">${thinkMsg}</div>`;
+    content.innerHTML = `<div class="thinking">${escHtml(thinkMsg)}</div>`;
     return;
   }
 
   const act = s.user_action;
 
   if (act === "propose") {
-    const nNeed = s.mission_sizes[s.mission_idx];  // 修复：mission_idx 已是0-indexed
+    const nNeed = s.mission_sizes[s.mission_idx];
     hint.textContent = `📋 你是队长，请提名 ${nNeed} 人执行任务（已选：0/${nNeed}）`;
     content.innerHTML = `
       <div id="propose-area">
@@ -410,7 +428,7 @@ function renderInput(s) {
     s.players.forEach(p => {
       const label = document.createElement("label");
       label.className = "propose-check";
-      label.innerHTML = `<input type="checkbox" value="${p}" onchange="onProposeChange(${nNeed})"> ${p}`;
+      label.innerHTML = `<input type="checkbox" value="${escHtml(p)}" onchange="onProposeChange(${nNeed})"> ${escHtml(p)}`;
       cbContainer.appendChild(label);
     });
 
@@ -441,7 +459,7 @@ function renderInput(s) {
     s.players.forEach(p => {
       const label = document.createElement("label");
       label.className = "propose-check" + (currentTeam.includes(p) ? " selected" : "");
-      label.innerHTML = `<input type="checkbox" value="${p}" ${currentTeam.includes(p) ? "checked" : ""} onchange="onSummaryChange(${nNeed})"> ${p}`;
+      label.innerHTML = `<input type="checkbox" value="${escHtml(p)}" ${currentTeam.includes(p) ? "checked" : ""} onchange="onSummaryChange(${nNeed})"> ${escHtml(p)}`;
       cbContainer.appendChild(label);
     });
     onSummaryChange(nNeed);
@@ -486,7 +504,7 @@ function renderInput(s) {
     content.innerHTML = `<div id="assassin-area">
       <select id="assassin-target">
         <option value="">-- 选择目标 --</option>
-        ${s.players.filter(p => p !== s.user).map(p => `<option value="${p}">${p}</option>`).join("")}
+        ${(s.assassin_candidates || []).map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join("")}
       </select>
       <button class="btn" onclick="submitAssassinate()">🗡 刺杀</button>
     </div>`;
@@ -584,13 +602,14 @@ function showWinner(s) {
   title.textContent = s.winner === "good" ? "✨ 好人获胜！" : "💀 坏人获胜！";
   if (s.roles) {
     rolesEl.innerHTML = "<b>角色揭晓：</b><br>" +
-      Object.entries(s.roles).map(([p,r]) => `${p} → ${r}`).join("　");
+      Object.entries(s.roles).map(([p,r]) => `${escHtml(p)} → ${escHtml(r)}`).join("　");
   }
   banner.style.display = "flex";
 }
 
 function escHtml(str) {
-  return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 }
 </script>
 </body>
